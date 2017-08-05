@@ -9,6 +9,7 @@ function love.load()
   score = 0
   ballsRemaining = 3
   paddleDirection = 0
+  gameOver = false
 
   --- Game Objects
   -- 0 degrees heading is to the right, 90 degrees is straight down (because larger Y moves the ball downwards)
@@ -21,8 +22,9 @@ function love.load()
   -- going to start with just one layer of bricks
   brickHeight = 25
   brickWidth = 50
-  numBricks = math.floor(windowWidth / brickWidth)
   brickMargin = math.fmod(windowWidth, brickWidth) / 2
+  numBricks = math.floor( (windowWidth - brickMargin * 2) / brickWidth)
+  brickY = windowHeight * 0.1
 
   bricks = {}
   for i=1,numBricks do
@@ -40,16 +42,28 @@ function love.draw()
   drawInfo()
 end
 
---- Update the positions of paddles and ball
+--- Update the positions of the paddle and ball
 function love.update(dt)
+  if gameOver then return end
+
   updatePaddle()
   updateBall()
+
+  if allBricksDestroyed() then
+    gameOver = true
+    ball.speed = 0
+  end
 end
 
 function drawInfo()
   setDrawColorGrey()
   love.graphics.print("B: " .. ballsRemaining, windowWidth * 0.9, windowHeight * 0.2)
   love.graphics.print("S: " .. score, windowWidth * 0.9, windowHeight * 0.2 + 30)
+
+  if gameOver then
+    setDrawColorWhite()
+    love.graphics.print("Game Over!", windowWidth / 3, windowHeight / 3, 0, 5)
+  end
 end
 
 function drawPaddle()
@@ -64,7 +78,7 @@ end
 
 function drawBricks()
   x = brickMargin
-  y = windowHeight * 0.1
+  y = brickY
 
   for i,exists in ipairs(bricks) do
     if exists then
@@ -132,7 +146,8 @@ function updateBall()
     ball.heading = 360 - ball.heading
     
     if ballHitsPaddle(dX, dY) then
-      ball.heading = ball.heading + 15 * paddleDirection
+      -- Give the user ability to affect the ball heading within a certain bounds
+      ball.heading = math.min(315, math.max(225, ball.heading + 15 * paddleDirection))
     end
 
   elseif ballHitsLeftBoundary(dX) or ballHitsRightBoundary(dX) then
@@ -147,11 +162,13 @@ function updateBall()
       ball.heading = math.random(360)
     else
       ball.speed = 0
+      gameOver = true
     end
   elseif ballHitsBrick(dX, dY) then
-      destroyBrick(newX, newY)
+      destroyBrick(brickIndexAt(newX, newY))
       score = score + 1
-      -- need to figure out where we hit the brick so we can change the heading
+      newY = ball.y - dY
+      ball.heading = 360 - ball.heading
   end
 
   ball.x = newX
@@ -175,7 +192,16 @@ function ballHitsPaddle(dX, dY)
 end
 
 function ballHitsBrick(dX, dY)
-  return false
+  newX = ball.x + dX
+  newY = ball.y + dY
+
+  if brickY < newY and newY < brickY + brickHeight then
+    -- We are at the right height. Check if we are on an enabled brick
+    brickIndex = brickIndexAt(newX, newY)
+    if bricks[brickIndex] then return true else return false end
+  else
+    return false
+  end
 end
 
 function ballHitsLeftBoundary(dX)
@@ -188,4 +214,21 @@ end
 
 function pointInRectangle(px, py, rx, ry, rw, rh)
   return px >= rx and px <= rx + rw and py >= ry and py <= ry + rh
+end
+
+function brickIndexAt(x, y)
+  return math.ceil( (x - brickMargin) / brickWidth)
+end
+
+function destroyBrick(index)
+  bricks[index] = false
+end
+
+function allBricksDestroyed()
+  for i,brick in ipairs(bricks) do
+    if brick then
+      return false
+    end
+  end
+  return true
 end
